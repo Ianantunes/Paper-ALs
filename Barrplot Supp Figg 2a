@@ -1,0 +1,154 @@
+# Data processment
+database <- as.data.frame(read.csv(file.choose()))
+
+data <- database %>% select(-Sample)
+data <- data %>%
+  group_by(Diagnostic, Sex) %>%
+  mutate(across(colnames(.)[3:44], ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) %>%
+  ungroup()
+data <- data %>% select(-Sex)
+str(data)
+
+data$Age = ifelse(data$Age <= 1, "0-1",
+                  ifelse(data$Age <= 12, "2-12",
+                         ifelse(data$Age <= 17, "13-17",
+                                ifelse(data$Age <= 64, "18-64", "65+"))))
+
+data <- data %>% tidyr::gather("markers", "value", -Age, -Diagnostic) #FOCAR DPS
+
+#felipe <- subset(data2, markers=="CD2"|markers=="CD7"|markers=="sCD3"|markers=="cCD3"|markers=="CD4"|markers=="CD8"|markers=="CD16"|markers=="CD5"|markers=="CD1a"|markers=="TCRa.b"|markers=="TCRg.d"|markers=="CD10"|markers=="CD19"|markers=="sCD22"|markers=="cCD22"|markers=="TdT"|markers=="cCD79a"|markers=="CD20"|markers=="sIgM"|markers=="cIgM"|markers=="NG2"|markers=="CD13"|markers=="CD36"|markers=="CD33"|markers=="CD65"|markers=="MPO"|markers=="CD117"|markers=="CD15"|markers=="CD71"|markers=="CD235a"|markers=="CD14"|markers=="CD64"|markers=="CD41"|markers=="CD42b"|markers=="CD61"|markers=="CD34"|markers=="CD45"|markers=="HLADR"|markers=="CD11b"|markers=="CD25"|markers=="CD38")
+
+#dim(felipe)
+#LAUDO <- subset(data2, markers=="LAUDO")
+
+df_B <- subset(data, markers=="CD10"|markers=="CD19"|markers=="sCD22"|markers=="cCD22"|markers=="TdT"|
+                 markers=="cCD79a"|markers=="CD20"|markers=="sIgM"|markers=="cIgM"|markers=="NG2"|markers=="CD34"|markers=="HLADR"|markers=="CD38")
+
+df_T <- subset(data, markers=="CD2"|markers=="CD7"|markers=="sCD3"|markers==" cCD3"|markers=="CD4"|markers=="CD8"|
+                 markers=="CD5"|markers=="CD34"|markers=="HLADR"|markers=="CD38")
+
+df_M <- subset(data, markers=="CD16"|markers=="CD13"|markers=="CD36"|markers=="CD33"|markers=="CD65"|markers=="MPO"|markers=="CD117"|
+                 markers=="CD71"|markers=="CD14"|markers=="CD64"|markers=="CD34"|markers=="HLADR"|markers=="CD38")
+
+df_B$value <- as.numeric(df_B$value)
+df_T$value <- as.numeric(df_T$value)
+df_M$value <- as.numeric(df_M$value)
+
+group_mean_sdB  = df_B %>% group_by(Diagnostic=df_B$Diagnostic, Age=df_B$Age) %>% dplyr::summarise(n=n(), mean = mean(value), sd = sd(value)) %>% 
+  mutate(se=sd/sqrt(n)) %>% mutate(ic=se*qt((1-0.05)/2+.5, n-1)) 
+
+group_mean_sdT  = df_T %>% group_by(Diagnostic=df_T$Diagnostic, Age=df_T$Age) %>% dplyr::summarise(n=n(), mean = mean(value), sd = sd(value)) %>% 
+  mutate(se=sd/sqrt(n)) %>% mutate(ic=se*qt((1-0.05)/2+.5, n-1)) 
+
+group_mean_sdM  = df_M %>% group_by(Diagnostic=df_M$Diagnostic, Age=df_M$Age) %>% dplyr::summarise(n=n(), mean = mean(value), sd = sd(value)) %>% 
+  mutate(se=sd/sqrt(n)) %>% mutate(ic=se*qt((1-0.05)/2+.5, n-1)) 
+
+idade_order <- c("0-1", "2-12", "13-17", "18-64", "65+")
+
+group_mean_sdB$Age <- factor(group_mean_sdB$Age, levels = idade_order)
+group_mean_sdB$Diagnostic <- factor(group_mean_sdB$Diagnostic, levels = c("Control", "AML", "B-ALL", "T-ALL"))
+
+group_mean_sdT$Age <- factor(group_mean_sdT$Age, levels = idade_order)
+group_mean_sdT$Diagnostic <- factor(group_mean_sdT$Diagnostic, levels = c("Control", "AML", "B-ALL", "T-ALL"))
+
+group_mean_sdM$Age <- factor(group_mean_sdM$Age, levels = idade_order)
+group_mean_sdM$Diagnostic <- factor(group_mean_sdM$Diagnostic, levels = c("Control", "AML", "B-ALL", "T-ALL"))
+
+###############################################################
+
+#  AML   B-ALL Control   T-ALL 
+#  656     253     109      51 
+#  Total = 1069
+
+# Normalize a coluna n
+total_nB <- sum(group_mean_sdB$n)
+total_nT <- sum(group_mean_sdT$n)
+total_nM <- sum(group_mean_sdM$n)
+
+group_mean_sdB$n <- (group_mean_sdB$n / max(total_nB)) * 1069
+group_mean_sdT$n <- (group_mean_sdT$n / max(total_nT)) * 1069
+group_mean_sdM$n <- (group_mean_sdM$n / max(total_nM)) * 1069
+
+ggplot(group_mean_sdB, aes(x=Age, y=mean, color = Diagnostic, group = Diagnostic)) + 
+  geom_point(aes(size = n)) +
+  geom_line(aes(linetype = Diagnostic)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                color = 'black', width=.1)+  # Facetando por uma única linha
+  labs(title = "Aging effect with B-ALL focus")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.background = element_blank(),
+        axis.text = element_text(family = 'Arial', size = 12),
+        axis.text.x = element_text(size = 12),
+        axis.title = element_text(family = 'Arial', size = 14),
+        axis.title.x = element_text(family = 'Arial', size = 12),
+        axis.title.y = element_text(family = 'Arial', size = 12)) +
+  scale_color_manual(values = c("#616F39", "#6A011F", "#93AECC", "#08376A")) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid"))+
+  scale_y_continuous(breaks = pretty(c(0,50)), limits = c(0,50))
+
+ggplot(group_mean_sdT, aes(x=Age, y=mean, color = Diagnostic, group = Diagnostic)) + 
+  geom_point(aes(size = n)) +
+  geom_line(aes(linetype = Diagnostic)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                color = 'black', width=.1)+  # Facetando por uma única linha
+  labs(title = "Aging effect with T-ALL focus")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.background = element_blank(),
+        axis.text = element_text(family = 'Arial', size = 12),
+        axis.text.x = element_text(size = 12),
+        axis.title = element_text(family = 'Arial', size = 14),
+        axis.title.x = element_text(family = 'Arial', size = 12),
+        axis.title.y = element_text(family = 'Arial', size = 12)) +
+  scale_color_manual(values = c("#616F39", "#6A011F", "#93AECC", "#08376A")) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid"))+
+  scale_y_continuous(breaks = pretty(c(0,50)), limits = c(0,50))
+
+ggplot(group_mean_sdM, aes(x=Age, y=mean, color = Diagnostic, group = Diagnostic)) + 
+  geom_point(aes(size = n)) +
+  geom_line(aes(linetype = Diagnostic)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se),
+                color = 'black', width=.1)+  # Facetando por uma única linha
+  labs(title = "Aging effect with AML focus")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.background = element_blank(),
+        axis.text = element_text(family = 'Arial', size = 12),
+        axis.text.x = element_text(size = 12),
+        axis.title = element_text(family = 'Arial', size = 14),
+        axis.title.x = element_text(family = 'Arial', size = 12),
+        axis.title.y = element_text(family = 'Arial', size = 12)) +
+  scale_color_manual(values = c("#616F39", "#6A011F", "#93AECC", "#08376A")) +
+  scale_linetype_manual(values = c("solid", "solid", "solid", "solid"))+
+  scale_y_continuous(breaks = pretty(c(0,50)), limits = c(0,50))
+
+### Material para os boxplots sistematicos com as correlações! 
+AML_with_group <- cbind(group_mean_sdM, Group = "AML")
+B_ALL_with_group <- cbind(group_mean_sdB, Group = "B-ALL")
+T_ALL_with_group <- cbind(group_mean_sdT, Group = "T-ALL")
+BarrplotDF <- rbind(AML_with_group, B_ALL_with_group, T_ALL_with_group)
+
+# Data table save
+nome_pasta <- "CorreloTablesALpaper"
+if (!file.exists(file.path(getwd(), nome_pasta))) {
+  dir.create(file.path(getwd(), nome_pasta))
+  cat("Pasta", nome_pasta, "criada.\n")
+} else {
+  cat("A pasta", nome_pasta, "já existe.\n")
+}
+setwd(file.path(getwd(), nome_pasta))
+getwd() # Confirmar
+
+write.table(BarrplotDF, sep = ",", file = "./BarrplotDF.csv", quote = FALSE, col.names = FALSE)
+
+
+
+
+
+
+
+
+
+
+
