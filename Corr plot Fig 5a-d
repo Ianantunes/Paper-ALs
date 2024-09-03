@@ -1,0 +1,130 @@
+#Install packages 
+install.packages("corrplot")
+install.packages("viridis")
+install.packages("scales")
+install.packages("colorspace")
+
+#acess library
+library(corrplot)
+library(viridis)
+library(scales)
+library(colorspace)
+
+getwd()
+
+DATA <- read.csv(file.choose())
+mm <- DATA %>% select(-Sex, -Age, -Diagnostic, -Sample)
+data_Controle <- DATA %>% filter(Diagnostic == "Control")%>% select(-Sex, -Age, -Diagnostic, -Sample)
+data_LMA <- DATA %>% filter(Diagnostic == "AML")%>% select(-Sex, -Age, -Diagnostic, -Sample)
+data_LLAB <- DATA %>% filter(Diagnostic == "B-ALL")%>% select(-Sex, -Age, -Diagnostic, -Sample)
+data_LLAT <- DATA %>% filter(Diagnostic == "T-ALL")%>% select(-Sex, -Age, -Diagnostic, -Sample)
+str(data_LLAB)
+str(data_LLAT)
+str(data_LMA)
+str(data_Controle)
+
+plotC <- data_Controle %>%  #Ordem em select definida apos rodar com HCLUST... ae foi para os outros 
+  select(CD117, CD34, CD65, CD13, CD33, CD38, CD14, CD64, CD10, cCD79a, 
+         CD71, CD16, CD5, HLADR, CD19, CD4, sCD3, CD2, CD7, CD8, CD20, CD45) 
+plotM <- data_LMA %>% 
+  select(CD117, CD34, CD65, CD13, CD33, CD38, CD14, CD64, CD10, cCD79a, 
+         CD71, CD16, CD5, HLADR, CD19, CD4, sCD3, CD2, CD7, CD8, CD20, CD45) 
+plotB <- data_LLAB %>% 
+  select(CD117, CD34, CD65, CD13, CD33, CD38, CD14, CD64, CD10, cCD79a, 
+         CD71, CD16, CD5, HLADR, CD19, CD4, sCD3, CD2, CD7, CD8, CD20, CD45) 
+plotT <- data_LLAT %>% 
+  select(CD117, CD34, CD65, CD13, CD33, CD38, CD14, CD64, CD10, cCD79a, 
+         CD71, CD16, CD5, HLADR, CD19, CD4, sCD3, CD2, CD7, CD8, CD20, CD45) 
+
+matrixdataC <- as.matrix(plotC)
+matrixdataM <- as.matrix(plotM)
+matrixdataB <- as.matrix(plotB)
+matrixdataT <- as.matrix(plotT)
+
+matriz_correlacaoC <- cor(matrixdataC, use = "pairwise.complete.obs", method = c("spearman"))
+matriz_correlacaoM <- cor(matrixdataM, use = "pairwise.complete.obs", method = c("spearman"))
+matriz_correlacaoB <- cor(matrixdataB, use = "pairwise.complete.obs", method = c("spearman"))
+matriz_correlacaoT <- cor(matrixdataT, use = "pairwise.complete.obs", method = c("spearman"))
+#function (x, y = NULL, use = "everything", method = c("pearson", "kendall", "spearman")) 
+
+C<-cor(matriz_correlacaoC)
+M<-cor(matriz_correlacaoM)
+B<-cor(matriz_correlacaoB)
+T<-cor(matriz_correlacaoT)
+
+#define the correlogram?s color
+#1
+col=rev(viridis(256))
+
+#2 BLUES (https://rdrr.io/cran/viridis/f/vignettes/intro-to-viridis.Rmd)
+col = gradient_n_pal(brewer_pal(type="seq")(8))(seq(0, 1, length=8))
+
+#3 COLORSPACE (https://www.groundai.com/project/colorspace-a-toolbox-for-manipulating-and-assessing-colors-and-palettes/1)
+col = sequential_hcl(8, palette = "Lajolla")
+
+#Run with hierarchical cluster
+#you can use lower (triangle), upper (triangle) or full (square)
+
+corrplot(C, method="circle", cl.lim = c(-1, 1), type="full", order="hclust", col = col, tl.srt = 60, tl.col = "black", tl.cex = 2)
+corrplot(M, method="circle", cl.lim = c(-1, 1), type="full", order="original", col = col, tl.srt = 60, tl.col = "black", tl.cex = 2)
+corrplot(B, method="circle", cl.lim = c(-1, 1), type="full", order="original", col = col, tl.srt = 60, tl.col = "black", tl.cex = 2)
+corrplot(T, method="circle", cl.lim = c(-1, 1), type="full", order="original", col = col, tl.srt = 60, tl.col = "black", tl.cex = 2)
+
+nome_pasta <- "CorreloTablesALpaper"
+if (!file.exists(file.path(getwd(), nome_pasta))) {
+  dir.create(file.path(getwd(), nome_pasta))
+}
+setwd(file.path(getwd(), nome_pasta))
+getwd() # Confirmar
+
+# Tabelas suplementares
+write.table(C, sep = ",", file = "./ControlCorrplot.csv", quote = FALSE, col.names = FALSE)
+write.table(M, sep = ",", file = "./LMACorrplot.csv", quote = FALSE, col.names = FALSE)
+write.table(B, sep = ",", file = "./B-ALLCorrplot.csv", quote = FALSE, col.names = FALSE)
+write.table(T, sep = ",", file = "./T-ALLCorrplot.csv", quote = FALSE, col.names = FALSE)
+
+#################################################################################################################
+#################################################################################################################
+#################################################################################################################
+
+### Material para os boxplots sistematicos com as correlações! 
+C_with_group <- cbind(C, Group = "Control")
+M_with_group <- cbind(M, Group = "AML")
+B_with_group <- cbind(B, Group = "B-ALL")
+T_with_group <- cbind(T, Group = "T-ALL")
+
+# Concatenar os data frames
+matriz_concatenada <- rbind(C_with_group, M_with_group, B_with_group, T_with_group)
+
+matriz_concatenada[, 1:22] <- apply(matriz_concatenada[, 1:22], 2, function(x) abs(as.numeric(x)))
+
+matriz_concatenada2 <- as.data.frame(matriz_concatenada)
+colnames(matriz_concatenada2)[23] <- "Diagnostic"
+matriz_concatenada2$Diagnostic <- factor(matriz_concatenada2$Diagnostic, levels = c("Control", "AML", "B-ALL", "T-ALL"))
+matriz_concatenada2[, 1:22] <- lapply(matriz_concatenada2[, 1:22], function(x) {
+  as.numeric(x)
+})
+
+# Data table save
+nome_pasta <- "CorreloTablesALpaper"
+if (!file.exists(file.path(getwd(), nome_pasta))) {
+  dir.create(file.path(getwd(), nome_pasta))
+  cat("Pasta", nome_pasta, "criada.\n")
+} else {
+  cat("A pasta", nome_pasta, "já existe.\n")
+}
+setwd(file.path(getwd(), nome_pasta))
+getwd() # Confirmar
+
+write.table(matriz_concatenada2, sep = ",", file = "./ALLcorrplots.csv", quote = FALSE, col.names = TRUE)
+
+
+
+
+
+
+
+
+
+
+
