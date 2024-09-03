@@ -1,0 +1,153 @@
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+
+# Data processment
+database <- as.data.frame(read.csv(file.choose()))
+
+filled_data <- database %>%
+  mutate_if(.predicate = is.numeric, .funs = as.numeric) %>%
+  ungroup() 
+
+filled_data <- filled_data %>% select(-Sample)
+filled_data <- filled_data %>% select(-Sex)
+
+filled_data$Diagnostic <- factor(filled_data$Diagnostic, levels = c("Control", "AML", "B-ALL", "T-ALL"))
+
+head(filled_data)
+str(filled_data)
+
+data <- data.frame(filled_data)
+
+### Com todos os markers
+data <- filled_data %>% tidyr::gather("markers", "value", -Age, -Diagnostic) 
+
+### Selecionando markers
+data <- filled_data %>% 
+  select(Age, Sex, Diagnostic,  CD117, CD34, CD65, CD13, CD33, CD38, CD14, CD64, CD10, cCD79a, 
+         CD71, CD16, CD5, HLADR, CD19, CD4, sCD3, CD2, CD7, CD8, CD20, CD45) %>% tidyr::gather("markers", "value", -Age, -Sex, -Diagnostic) 
+
+covariables <- c("Sex", "Age", "Diagnostic", "Sample")
+markers <- colnames(data)[!colnames(data)%in%covariables]
+
+p <- ggplot(data, aes(x=Age, y=value, color=Diagnostic), #log2(value) caso queira plotar logaritmizando 
+            add = c("jitter", "median_iqr"))+
+  facet_wrap(~markers,  nrow=, ncol = 7, strip.position="bottom")+ #Da pra mexer no top
+  geom_point(size=.5, alpha=.2)+
+  geom_smooth(aes(colour=Diagnostic, fill=Diagnostic), method=lm, se=TRUE, formula=y~x, size=1, alpha=.15)+
+  scale_colour_manual(values = c("#616F39", "#6A011F", "#93AECC", "#08376A"))+
+  scale_fill_manual(values = c("#616F39", "#6A011F", "#93AECC", "#08376A"))+
+  
+  scale_y_continuous(breaks = pretty(c(0,100), n = 5), limits = c(0,200))+
+  
+  theme(legend.position = "top")+
+  labs(x = markers, y = "Age distribution") +
+  theme(strip.text.x = element_text(size = 13))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_text(size = 12),
+        axis.ticks.x=element_blank(),
+        axis.line.x=element_line(),
+        strip.background = element_rect(color="white", fill="white"),
+        strip.placement = "outside", 
+        panel.spacing.x = unit(1,"line"),
+        panel.spacing.y = unit(0,"line"),
+        panel.border = element_blank(), 
+        panel.background = element_blank(), 
+        panel.grid = element_blank(),
+        axis.text.y = element_text(size = 13), 
+        axis.title.y = element_text(size = 16))  
+
+p + stat_cor(method = "spearman", size = 4, cor.coef.name = c("R", "rho", "tau")) 
+
+p_with_cor <- p + stat_cor(method = "spearman", size = 4, cor.coef.name = c("R", "rho", "tau"))
+
+# Data table save      ### Rodar isso apenar 1x
+nome_pasta <- "CorreloTablesALpaper"
+if (!file.exists(file.path(getwd(), nome_pasta))) {
+  dir.create(file.path(getwd(), nome_pasta))
+  cat("Pasta", nome_pasta, "criada.\n")
+} else {
+  cat("A pasta", nome_pasta, "já existe.\n")
+}
+setwd(file.path(getwd(), nome_pasta))
+getwd() # Confirmar
+
+# Criar uma lista para armazenar os resultados
+results_list <- list()
+# Loop sobre os diferentes grupos em 'markers'
+for (marker in unique(data$markers)) {
+  # Filtrar os dados para o marcador atual
+  subset_data <- subset(data, markers == marker)
+  # Ajustar o modelo de regressão linear
+  model <- lm(value ~ Age * Diagnostic, data = subset_data)
+  # Extrair os coeficientes da regressão e valores associados
+  regression_stats <- tidy(model)
+  # Calcular o coeficiente de determinação
+  rsquared <- summary(model)$r.squared
+  # Adicionar o coeficiente de determinação aos resultados
+  regression_stats$rsquared <- rsquared
+  # Adicionar os resultados à lista
+  results_list[[marker]] <- regression_stats
+}
+# Combinar os resultados em um único data frame
+results_df <- do.call(rbind, results_list)
+# Salvar os resultados em um arquivo CSV
+write.table(results_df, sep = ",", file = "./regression_results.csv", quote = FALSE, col.names = FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
