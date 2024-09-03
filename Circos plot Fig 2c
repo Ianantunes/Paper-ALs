@@ -1,0 +1,105 @@
+
+library(circlize)
+library(ggplot2)
+
+library(tidyr)
+library(dplyr)
+
+# Criando os vetores para Term e Genes
+Term <- c("TCA", "TCA", "TCA", "TCA", "TCA", "TCA", "TCA", 
+          "BCRSP", "BCRSP", "BCRSP", "BCRSP", "BCRSP",
+          "PRLP", "PRLP", "PRLP", "PRLP", "PRLP",
+          "ROI8P", "ROI8P", "ROI8P", "ROI8P",
+          "ROI2P", "ROI2P", "ROI2P",
+          "ROIP", "ROIP", "ROIP",
+          "H", "H", "H",
+          "MLD", "MLD",
+          "PMP", "PMP",
+          "ROTNFP", "ROTNFP", "ROTNFP", "ROTNFP", "ROTNFP",
+          "ROCPP", "ROCPP", "ROCPP", "ROCPP")
+
+Genes <- c("CD2", "CD4", "PTPRC", "CD8A", "CD7", "KIT", "CD3E",
+           "CD79A", "PTPRC", "CD19", "CD38", "MS4A1",
+           "FCGR3A", "PTPRC", "TFRC", "CD38", "CD3E",
+           "CD2", "PTPRC", "CD14", "CD33",
+           "CD4", "PTPRC", "CD34",
+           "FCGR3A", "HLA-DRA", "FCGR1A",
+           "PTPRC", "KIT", "CD34",
+           "CD4", "KIT",
+           "MME", "ANPEP",
+           "CD2", "FCGR3A", "PTPRC", "CD14", "CD33",
+           "TFRC", "KIT", "CD33", "FUT3")
+
+# Criando o dataframe
+circos <- data.frame(Term, Genes)
+
+chordDiagram(circos, big.gap=1)
+
+
+circos2 <- circos
+circos2$Term <- gsub("H", "H  ", circos2$Term)
+
+# circos.par(gap.after = c(rep(5, nrow(mat)-1), 15, rep(5, ncol(mat)-1), 15))
+
+library(RColorBrewer)
+palette <- brewer.pal(11, "RdYlBu") 
+names(palette) = unique(circos2$Term)
+
+circos.clear()
+
+circos.par(circle.margin=c(0.3,0.3,0.3,0.3))
+
+print(unique(circos2$Term))
+table(circos2$Term)
+
+print(unique(circos2$Genes))
+table(circos2$Genes)
+
+colors <- setNames(c("#D73027", "#E0F3F8", "#ABD9E9", "#74ADD1", "#F46D43", "#313695", "#FEE090", "#FDAE61", "#FFFFBF", "#4575B4", "#A50026", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53", "gray53"), 
+                   c("BCRSP", "H  ", "MLD", "PMP", "PRLP", "ROCPP", "ROI2P", "ROI8P", "ROIP", "ROTNFP", "TCA", "ANPEP", "CD14", "CD19", "CD2", "CD33", "CD34", "CD38", "CD3E", "CD4", "CD7", "CD79A", "CD8A", "FCGR1A", "FCGR3A", "FUT3", "HLA-DRA", "KIT", "MME", "MS4A1", "PTPRC", "TFRC"))
+
+c(BCRSP="#D73027" ,H="#E0F3F8" ,MLD="#ABD9E9" ,PMP="#74ADD1" ,PRLP="#F46D43" ,ROCPP="#313695" ,ROI2P="#FEE090" ,ROI8P="#FDAE61" ,ROIP="#FFFFBF" ,ROTNFP="#4575B4" ,TCA="#A50026")
+
+# Aumentar o tamanho da fonte nas células
+chordDiagram(circos2, reduce=0, preAllocateTracks = 0.01, 
+             grid.col=colors, transparency = 0.1, 
+             directional = 0, annotationTrack ="grid",
+             annotationTrackHeight = mm_h(c(1, 1)),  # Ajuste o tamanho da fonte aqui
+             self.link = 10, big.gap = 20, small.gap = 2)
+
+
+# Adicionar texto nas células
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(CELL_META$xcenter, 
+              ylim[1] + cm_h(3), 
+              sector.name, 
+              facing = "clockwise",  # Alterado para "inside"
+              niceFacing = TRUE,
+              adj = c(-0.3, 0.5),
+              cex = 1.2,  # Ajuste o tamanho da fonte conforme necessário
+              font = 1)
+  circos.axis(h = "top",
+              labels.cex = 0.1
+  )
+}, bg.border = NA)
+
+# Adicionar legenda fora do gráfico
+
+legcolors <- setNames(c("#D73027", "#E0F3F8", "#ABD9E9", "#74ADD1", "#F46D43", "#313695", "#FEE090", "#FDAE61", "#FFFFBF", "#4575B4", "#A50026"),
+                      c("T Cell Activation (GO:0042110)",
+                        "B Cell Receptor Signaling Pathway (GO:0050853)",
+                        "Positive Regulation Of Lymphocyte Proliferation (GO:0050671)",
+                        "Regulation Of Interleukin-8 Production (GO:0032677)",
+                        "Regulation Of Interleukin-2 Production (GO:0032663)",
+                        "Regulation Of Immune Response (GO:0050776)",
+                        "Hemopoiesis (GO:0030097)",
+                        "Myeloid Leukocyte Differentiation (GO:0002573)",
+                        "Peptide Metabolic Process (GO:0006518)",
+                        "Regulation Of Tumor Necrosis Factor Production (GO:0032680)",
+                        "Regulation Of Cell Population Proliferation (GO:0042127)"))
+
+legend("bottom", legend = legcircos, fill = palette, 
+       title = "Legend", cex = 1.2, ncol = 1)
