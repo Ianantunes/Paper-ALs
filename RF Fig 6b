@@ -1,0 +1,374 @@
+# function adapted from the code in the link below
+# https://shiring.github.io/machine_learning/2017/03/16/rf_plot_ggraph
+# last accessed at 06/29/2021 (date in US format)
+
+tree_func <- function(final_model, tree_num) {
+  # get tree by index
+  tree <- randomForest::getTree(final_model, k = tree_num, labelVar = TRUE) %>%
+    tibble::rownames_to_column() %>%
+    # make leaf split points to NA, so the 0s won't get plotted
+    mutate(`split point` = ifelse(is.na(prediction), `split point`, NA))
+  
+  # prepare data frame for graph
+  graph_frame <- data.frame(
+    from = rep(tree$rowname, 2),
+    to = c(tree$`left daughter`, tree$`right daughter`)
+  )
+  
+  # convert to graph and delete the last node that we don't want to plot
+  graph <- graph_from_data_frame(graph_frame) %>%
+    delete_vertices("0")
+  
+  # set node labels
+  igraph::V(graph)$node_label <- gsub("_", " ", as.character(tree$`split var`))
+  igraph::V(graph)$leaf_label <- as.character(tree$prediction)
+  igraph::V(graph)$split <- as.character(round(tree$`split point`, digits = 2))
+  
+  # plot
+  suppressWarnings({
+    plot <- ggraph(graph, "dendrogram") +
+      theme_bw() +
+      geom_edge_elbow() +
+      geom_node_point() +
+      geom_node_text(aes(label = node_label), na.rm = TRUE, repel = TRUE) +
+      geom_node_label(aes(label = split),
+                      vjust = 2.5, na.rm = TRUE,
+                      fill = "white"
+      ) +
+      geom_node_label(aes(label = leaf_label, fill = leaf_label),
+                      na.rm = TRUE,
+                      repel = TRUE, colour = "white", fontface = "bold", show.legend = FALSE
+      ) +
+      theme(
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_rect(fill = "white"),
+        panel.border = element_blank(),
+        axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        plot.title = element_text(size = 18)
+      )
+  })
+  
+  return(plot)
+}
+
+# Packages
+suppressMessages({
+  load_lib <- c(
+    # data manipulation
+    "dplyr",
+    "tidyverse",
+    "tidymodels",
+    # random forest
+    "randomForest",
+    "randomForestExplainer",
+    "ROCR",
+    # graphics
+    "ggplot2",
+    "ggraph",
+    "igraph",
+    "pheatmap",
+    # data description
+    "DescTools",
+    "MVN",
+    "psych"
+  )
+  install_lib <- load_lib[!(load_lib %in% installed.packages())] # check package
+  if (length(install_lib)) for (i in install_lib) install.packages(i) # install
+  
+  cat("Loaded Packages:\n")
+  print(sapply(load_lib, require, character = TRUE)) # load
+  cat("\n\n")
+})
+
+# Data processment
+database <- as.data.frame(read.csv(file.choose()))
+
+data <- database %>%
+  group_by(Diagnostic, Sex) %>%
+  mutate(across(colnames(.)[5:45], ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) %>%
+  ungroup()
+
+
+data <- data %>% 
+  select(Diagnostic, CD117, CD34, CD65, CD13, CD33, CD38, CD14, CD64, CD10, cCD79a, 
+         CD71, CD16, CD5, HLADR, CD19, CD4, sCD3, CD2, CD7, CD8, CD20, CD45) 
+
+colnames(data)[colnames(data) == 'Diagnostic'] <- 'Group'
+
+str(data)
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# WARNING: On lines 253 - 255 you must choose the three measures of variable
+# importance in order to keep going with the data analysis. Run the script only
+# til line 250, then evaluate the results obtained and choose the three measures
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+# script's parameters ----------------------------------------------------------
+# you can change the parameters below according to your needs
+
+# data related parameters
+glog_data <- FALSE # set to TRUE if you want to transform the data using glog
+
+std_data <- FALSE # set to TRUE if you wnat to standardize the data
+
+redux_method <- "none" # choose between "none", "PCA", "FA"
+
+redux_n_dim <- 4 # number of dimensions to retain in PCA or FA
+
+# random forest related parameters
+n_varibles_in_impt_plots <- 22 # choose number of variables to show plots
+
+n_trees <- 5000 # initial number of trees
+
+# graphics related parameters
+width_factor <- 2 # increase width_factor to save plots with larger width
+
+height_factor <- 2 # increase height_factor to save plots with larger height
+
+color_ramp <- RColorBrewer::brewer.pal(n = 7, name = "Blues") # heatmap color
+
+color_border <- grey(0.4) # heatmap border color
+
+fontsize <- 8 # heatmap font size
+
+# seed -------------------------------------------------------------------------
+set.seed(2021) # seed for replicate the replicating the analysis
+
+# load dataset -----------------------------------------------------------------
+data$Group <- factor(data$Group, levels = c("Control", "AML", "B-ALL", "T-ALL")) # groups as factors
+
+n <- ncol(data) # number of columns
+
+if (glog_data) data[, -n] <- LogSt(my_data[, -n]) # apply glog
+if (std_data) data[, -n] <- scale(my_data[, -n]) # standardize data
+
+# descriptive measures ---------------------------------------------------------
+# basic data struture
+desc_data <- c(
+  n_obs = nrow(data), n_vars = ncol(data[, -n]),
+  n_in_group = table(data$Group)
+)
+
+desc_stat <- mvn(data[, -1])$Descriptives # standard descriptive statistics
+
+desc_cor <- cor(data[, -1], method = "spearman") # spearman correlation
+
+# plot desc_cor using clustering on rows and columns
+# heatmap for spearman correlation matrix\n\n
+p_cor <- pheatmap(desc_cor,
+                  clustering_method = "ward.D",
+                  cluster_rows = TRUE, cluster_cols = TRUE,
+                  color = color_ramp, border_color = color_border, fontsize = fontsize
+)
+
+# apply none/PCA/FA method according to redux_method ---------------------------
+# perform data reduction if redux_method != "none"
+redux_data <- switch(redux_method,
+                     "none" = list(data = data, fit = "none"),
+                     "PCA" = {
+                       my_pca <- pca(data[, -n], redux_n_dim, rotate = "varimax")
+                       data <- data.frame(my_pca$scores, Group = data[, n])
+                       list(data = data, fit = fa.sort(my_pca))
+                     },
+                     "FA" = {
+                       my_fa <- fa(data[, -n], redux_n_dim, rotate = "varimax")
+                       data <- data.frame(my_fa$scores, Group = data[, n])
+                       list(data = data, fit = fa.sort(my_fa))
+                     }
+)
+
+data <- redux_data$data # data to be used in random forest
+
+# plot loading matrix if redux_method != "none"
+if (redux_method != "none") {
+  cat("(Print) results for ", redux_method, "\n\n")
+  print(redux_data$fit)
+  cat("\n\n")
+  
+  # reset some parameters due to PCA or FA
+  n <- ncol(data)
+  k <- n_varibles_in_impt_plots
+  n_varibles_in_impt_plots <- min(k, redux_n_dim)
+  if (k != n_varibles_in_impt_plots) {
+    cat("(Print) n_varibles_in_impt_plots was changed to ", redux_n_dim, "\n\n")
+  }
+  
+  redux_fit <- loadings(redux_data$fit) # loading matrix
+  redux_sorted_load <- matrix(unlist(redux_fit), ncol = redux_n_dim)
+  rownames(redux_sorted_load) <- rownames(redux_fit)
+  colnames(redux_sorted_load) <- colnames(redux_fit)
+  
+  redux_vars <- rownames(redux_fit) # variables
+  redux_n <- seq_len(redux_n_dim) # factors
+  
+  # dataset for ggplot
+  redux_df <- data.frame(
+    Loading = c(redux_fit),
+    Var = rep(redux_vars, redux_n_dim),
+    Factor = paste0("Factor ", rep(redux_n, each = nrow(redux_fit)))
+  )
+  redux_df$Var <- factor(redux_df$Var,
+                         levels = rownames(redux_fit),
+                         ordered = TRUE
+  )
+  
+  p_redux <- ggplot(redux_df, aes(x = Var, y = Loading, fill = Loading)) +
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    facet_wrap(~Factor, nrow = 1) +
+    scale_fill_gradient2(
+      name = "Loading: ", high = "blue", mid = "white",
+      low = "red", midpoint = 0, guide = "none"
+    ) +
+    theme_light(base_size = 12) +
+    theme(
+      legend.position = "top",
+      legend.box.background = element_rect(colour = "black", fill = NA),
+      panel.grid.minor.x = element_blank(),
+      strip.text = element_text(face = "bold", colour = "black"),
+      strip.background = element_rect(fill = grey(0.9), colour = "black")
+    ) +
+    labs(x = "", y = "Loading strength")
+}
+
+# split dataset into training and testing samples ------------------------------
+data_split <- initial_split(data, prop = 0.66, strata = "Group")
+sample_train <- training(data_split)
+sample_test <- testing(data_split)
+
+# create a 'recipe' object -----------------------------------------------------
+sample_recipe <- recipe(Group ~ ., data = sample_train)
+sample_prep <- sample_recipe %>% prep(training = sample_train, retain = TRUE)
+
+# tune random forest hyperparameters (mtry) ------------------------------------
+invisible(capture.output(
+  mtry <- tuneRF(sample_train[, -1], as.factor(sample_train$Group),
+                 ntreeTry = n_trees, stepFactor = 1.5, improve = 0.01,
+                 trace = FALSE, plot = FALSE
+  )
+))
+
+m <- mtry[mtry[, 2] == min(mtry[, 2]), 1][1] # best value of mtry
+
+# fit random forest model ------------------------------------------------------
+rf <- rand_forest(trees = n_trees, mtry = m, mode = "classification") %>%
+  set_engine("randomForest", importance = TRUE, localImp = TRUE) %>%
+  fit(Group ~ ., data = juice(sample_prep))
+print(rf$fit) # show basic results for the random forest model
+
+# defining colors for each group
+groups <- levels(sample_test$Group) #Leia e coloque as cores de acordo a ordem
+group_color <- c("#616F39", "#6A011F", "#93AECC", "#08376A")
+
+# warning: the next plot will be displayed but not saved (save it manually)
+plot(rf$fit, 
+     main = "Error rates", 
+     col = c("black", group_color), 
+     cex.axis = 1.4,  # Ajuste o tamanho das letras nos eixos
+     cex.lab = 1.4,
+     cex.main = 1.5)   # Ajuste o tamanho dos rótulos dos eixos
+legend("topright",
+       legend = c("OOB", groups), col = c("black", group_color), lty = 1, lwd = 2, cex = 1.3
+) # legends
+
+# evaluate the model -----------------------------------------------------------
+# roc curves
+pred_for_roc_curve <- predict(rf, sample_test[, -1], type = "prob") ####DFGWSGHARHG
+auc <- rep(NA, length(groups)) # vector for holding values of area under ROC
+names(auc) <- groups
+auc
+
+# warning: the next plot will be displayed but not saved (save it manually)
+par(cex.axis = 1.4)
+for (i in seq_len(length(groups))) {
+  # Define which observations belong to class[i]
+  true_values <- sample_test$Group == groups[i]
+  # Assess the performance of classifier for class[i]
+  pred <- prediction(pred_for_roc_curve[, i], true_values)
+  perf <- performance(pred, "tpr", "fpr")
+  if (i == 1) {
+    plot(perf, main = "ROC Curve", col = group_color[i], cex.axis = 1.4, cex.lab = 1.4, cex.main = 1.5)
+  }
+  else {
+    plot(perf, col = group_color[i], add = TRUE, cex.axis = 1.4,  cex.lab = 1.4, cex.main = 1.5)
+  }
+  # Calculate the area under the curve (AUC) and print it to screen
+  auc[i] <- unlist(performance(pred, measure = "auc")@ y.values)
+}
+legend("bottomright", legend = groups, col = group_color, lty = 1, lwd = 2, cex = 1.3) # legends
+
+pred_for_table <- predict(rf, sample_test[, -1])
+observed_classes <- unlist(sample_test[, n])
+predicted_classes <- unlist(pred_for_table)
+confusion_mat <- table(
+  observed = observed_classes,
+  predicted = predicted_classes
+)
+
+print(confusion_mat)
+auc
+
+# plot main results ------------------------------------------------------------
+# tree with least number of nodes
+tree_num <- which(rf$fit$forest$ndbigtree == min(rf$fit$forest$ndbigtree))[1]
+p_rf_tree <- tree_func(final_model = rf$fit, tree_num)
+
+# measures of variable importance for the fitted random forest model -----------
+
+impt_measures <- measure_importance(rf$fit)
+
+# chosing best set of importance measures to use
+p_choose_imp_1 <- plot_importance_ggpairs(impt_measures)
+p_choose_imp_2 <- plot_importance_rankings(impt_measures)
+
+print(p_choose_imp_1)
+
+print(p_choose_imp_2)
+
+# !!! STOP HERE AND EVALUATE THE RESULTS BEFORE CHOOSING THE THREE MEASURES !!!
+
+# define your chosen measures replacing NULL by the measure' name
+first_measure <- "gini_decrease" # ex: first_measure <- "no_of_trees"
+second_measure <- "no_of_nodes" # ex: second_measure <- "no_of_nodes"
+third_measure <- "mean_min_depth" #mean_min_depth # ex: third_measure <- "mean_min_depth"
+
+# test if user has chosen the three importance measures
+if (is.null(first_measure) | is.null(first_measure) | is.null(first_measure)) {
+  stop("You did not choose the three inportance meansures...
+        please start the hole script again")
+}
+
+# plot the chosen measures
+p_imp <- plot_multi_way_importance(impt_measures,
+                                   x_measure = first_measure,
+                                   y_measure = second_measure,
+                                   size_measure = third_measure,
+                                   no_of_labels = n_varibles_in_impt_plots
+)+ theme(text = element_text(size = 18), axis.text = element_text(size = 18)) 
+print(p_imp)
+
+# plot variable depth distribution
+min_depth <- min_depth_distribution(rf$fit)
+p_min_depth <- plot_min_depth_distribution(min_depth, mean_sample = "top_trees")+
+  theme(text = element_text(size = 18), axis.text = element_text(size = 18)) + 
+  scale_fill_manual(values = colorRampPalette(c("royalblue", "slategray1"))(14))
+print(p_min_depth)
+
+# plot interaction between pairs of variables in the random forest
+impt_vars <- important_variables(impt_measures,
+                                 k = n_varibles_in_impt_plots,
+                                 measures = c(first_measure, second_measure, third_measure))    
+
+# level of interaction between variables (min depth interacitons)
+interaction_vars <- min_depth_interactions(rf$fit, impt_vars)
+p_interaction <- plot_min_depth_interactions(interaction_vars)+
+  theme(text = element_text(size = 12), axis.text = element_text(size = 9)) 
+print(p_interaction)
+
