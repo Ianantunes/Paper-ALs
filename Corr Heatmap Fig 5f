@@ -1,0 +1,71 @@
+
+#From: https://jokergoo.github.io/ComplexHeatmap-reference/book/more-examples.html
+
+install.packages("circlize")
+
+library(ComplexHeatmap)
+library(circlize)
+library(writexl)
+library(dplyr)
+
+# Data processment
+
+Data_agregado <- matriz_concatenada2 %>% # A matrix vem dos correloplots em graph a parte
+  group_by(Diagnostic) %>%
+  summarise(across(colnames(matriz_concatenada2[1:22]), mean, na.rm = TRUE))
+Data_transposta <- t(Data_agregado[, -1])  # Exclui a coluna de agrupamento da transposta
+colnames(Data_transposta) <- Data_agregado$Diagnostic
+Data_final <- as.data.frame(Data_transposta)
+
+Data_final_numeric <- as.numeric(as.matrix(Data_final))
+dim(Data_final_numeric) <- dim(Data_final)
+colnames(Data_final_numeric) <- colnames(Data_final)
+rownames(Data_final_numeric) <- rownames(Data_final)
+str(Data_final_numeric)
+summary(Data_final_numeric)
+
+heatEX <-as.matrix(Data_final_numeric)
+
+ha1 = HeatmapAnnotation(
+  dist1 = anno_barplot(
+    colSums(heatEX), 
+    bar_width = 1, 
+    gp = gpar(col = "white", fill = "grey"), 
+    border = FALSE),
+  show_annotation_name = TRUE)
+ha2 = rowAnnotation(
+  dist2 = anno_barplot(
+    rowSums(heatEX), 
+    bar_width = 1, 
+    gp = gpar(col = "white", fill = "grey"), 
+    border = FALSE
+  ), show_annotation_name = FALSE)
+
+col_fun = colorRamp2(c(0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), c("#FAF5CD", "#F3C4BA", "#B87688", "#A62003", "#791F0B", "#08376A", "#083F82"))
+
+ht_list = Heatmap(heatEX, name = "Correlation Index",
+                  cluster_columns =TRUE, cluster_rows = TRUE, show_row_dend = TRUE, show_column_dend = TRUE, rect_gp = gpar(col= "white"), 
+                  show_column_names = TRUE, column_names_gp = gpar(fontsize = 12),
+                  row_names_side = "left", row_names_gp = gpar(fontsize = 12),
+                  column_title = 'Correlation Index',
+                  top_annotation = ha1, col = col_fun) + ha2 
+
+Heatmap(heatEX, 
+        name = "foo", cell_fun = function(j, i, x, y, width, height, fill) 
+        {
+          grid.text(sprintf("%.1f", heatEX[i, j]), x, y, gp = gpar(fontsize = 10))
+        }
+)
+
+draw(ht_list, ht_gap = unit(1, "mm"), heatmap_legend_side="bottom")
+
+nome_pasta <- "CorreloTablesALpaper"
+if (!file.exists(file.path(getwd(), nome_pasta))) {
+  dir.create(file.path(getwd(), nome_pasta))
+}
+setwd(file.path(getwd(), nome_pasta))
+getwd() # Confirmar
+
+write.table(heatEX, sep = ",", file = "./heatEX.csv", quote = FALSE, col.names = FALSE)
+
+
