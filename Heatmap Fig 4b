@@ -1,0 +1,67 @@
+library(ggplot2)
+library(circlize)
+library(ComplexHeatmap)
+library(tidyverse)
+
+# Data processment
+database <- as.data.frame(read.csv("database.csv"))
+
+data <- database %>%
+  group_by(Diagnostic, Sex) %>%
+  mutate(across(colnames(.)[5:45], ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) %>%
+  ungroup()
+
+mm <- data %>% select(-Sex, -Age, -Diagnostic, -Sample)
+data$Diagnostic <- factor(data$Diagnostic)  
+data$Sex <- factor(data$Sex)  
+data$Sample <- factor(data$Sample)  
+mm2 <- data.matrix(mm)
+
+#data$Sex <- gsub("F", "Female", data$Sex)
+#data$Sex <- gsub("M", "Male", data$Sex)
+
+teste <- colorRamp2(c(-2,0,2), c("royalblue", "black", "#C69749"))
+colors <- list(Diagnostic = c("Control"   = "#616F39", "AML"= "#6A011F", "B-ALL"  = "#93AECC", "T-ALL" = "#08376A"), Sex = c("Male"="#94B49F", "Female"="#9E7777"), Sample = c("PB"="#DAD0C2", "BM"="#5C8984")) 
+all <- data.frame(Diagnostic=data$Diagnostic, Sex=data$Sex, Sample=data$Sample)
+top <- HeatmapAnnotation(df=all,
+                         which="col", 
+                         col = colors,
+                         #annotation_width = unit(10,"cm"),
+                         #annotation_height = unit(10,"cm"),
+                         gap=unit(0,"mm"),
+                         simple_anno_size = unit(0.6, "cm"),
+                         annotation_name_gp = gpar(fontsize = 14))
+bottom <- HeatmapAnnotation(Age=anno_points(data$Age,
+                                            gp=gpar(fill=NA, col=ifelse(data$Age<18,"#A2678A",
+                                                                        ifelse(data$Age<64,"#4D3C77","#3F1D38"))),
+                                            pch = 16,
+                                            size = unit(1.5,"mm"),
+                                            extend = .1), annotation_name_side = "left")
+
+
+#ha = HeatmapAnnotation(foo = anno_boxplot(data$Age, height = unit(4, "cm")))
+
+draw(Heatmap(scale(t(mm)), name = "Z-score", col = teste, 
+             top_annotation = top, bottom_annotation =  bottom, 
+             column_split = data$Diagnostic, column_gap = unit(0, "mm"),
+             heatmap_legend_param = 
+               list(title = "Z-score", at = c(-2, 0, 2), 
+                    ncol = 1, position = "topleft"), 
+             row_names_gp = gpar(fontsize = 14),
+             column_names_gp = gpar(fontsize = 10)),
+     heatmap_legend_side="bottom",  merge_legend = TRUE)
+# 'topleft', 'topcenter', 'leftcenter-rot' and 'lefttop-rot' are only allowd for vertical continuous legend
+
+# Data table save
+nome_pasta <- "CorreloTablesALpaper"
+if (!file.exists(file.path(getwd(), nome_pasta))) {
+  dir.create(file.path(getwd(), nome_pasta))
+  cat("Pasta", nome_pasta, "criada.\n")
+} else {
+  cat("A pasta", nome_pasta, "já existe.\n")
+}
+setwd(file.path(getwd(), nome_pasta))
+getwd() # Confirmar
+
+write.table(mm, sep = ",", file = "./mmHM.csv", quote = FALSE, col.names = FALSE)
+
