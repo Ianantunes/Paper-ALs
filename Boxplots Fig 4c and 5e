@@ -1,0 +1,128 @@
+library(ggpubr)
+library(lemon)
+library(ggplot2)
+library(openxlsx)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(glue)
+library(gridExtra)
+
+# Data processment
+database <- as.data.frame(read.csv(file.choose()))
+
+# EXPRESSION
+
+filled_dataEXPR <- database %>% 
+  select(-Age, -Sample, -Sex) %>% 
+  tidyr::gather("markers", "value", -Diagnostic) 
+
+filled_dataEXPR$Diagnostic <- factor(filled_dataEXPR$Diagnostic, levels = c("Control", "AML", "B-ALL", "T-ALL"))
+
+my_comparisons <- list( c("Control", "AML"), 
+                        c("Control", "B-ALL"), 
+                        c("Control", "T-ALL"),
+                        c("AML", "B-ALL"), 
+                        c("AML", "T-ALL"), 
+                        c("B-ALL", "T-ALL"))
+symnum.args <- list(
+  cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), 
+  symbols = c("****","***", "**", "*", waiver()))
+
+markerssubset <- c("cCD79a", "CD10", "CD117", "CD13", "CD14", 
+                   "CD16", "CD19", "CD2", "CD20", "CD33", 
+                   "CD34", "CD38", "CD4", "CD45", "CD64", 
+                   "CD65", "CD7", "CD71", "CD8", "HLADR", "sCD3", "CD5")
+filled_dataEXPR2 <- filled_dataEXPR %>% filter(markers %in% markerssubset)
+
+
+
+ggboxplot(filled_dataEXPR2, x = "Diagnostic", y = "value",
+          color = "Diagnostic", palette = c("#616F39", "#6A011F", "#93AECC", "#08376A"),
+          add = c("jitter", "median_iqr"), 
+          add.params = list(size = 0.5))+
+  scale_y_continuous(breaks = pretty(c(0,100), n = 7), #Values showed from 0 to 8 with 4 breaks will show 0, 2, 4, 6 and 8
+                     limits = c(0,170), name=expression(Expression))+ # y scale + axis' name
+  expand_limits(y = c(0, 1.6), size=1)+
+  facet_wrap(~markers  , strip.position="bottom", ncol=4)+ #if you have more than 2 lines, use ( facet_rep_wrap(~gene, strip.position="bottom") ) instead of facet_Wrap
+  
+  stat_compare_means(method= "wilcox", label = "p.format", 
+                     label.y = c(110,120,130,140,150), bracket.size = 0.3, tip.length = 0.003, #location and brackets customization
+                     hide.ns = F, aes(Diagnostic = Diagnostic), comparisons = my_comparisons, 
+                     vjust = 0.5, size = 5, # * customization: vjust == 0 -> in the middle of the bracket; accepts negative values
+                     symnum.args = symnum.args)+ #customized this so that ns brackets won't show (hide.ns only hides the symbol)
+  
+  #theme(legend.position = "none")+
+  #labs(x = param) +
+  theme(strip.text.x = element_text(size = 15))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.line.x=element_line(),
+        strip.background = element_rect(color="white", fill="white"),
+        strip.placement = "outside",
+        panel.border = element_blank(), 
+        panel.background = element_blank(), 
+        panel.grid = element_blank(), 
+        panel.spacing.x = unit(0,"line"),
+        panel.spacing.y = unit(0,"line"),
+        axis.text.y = element_text(size = 14), 
+        axis.title.y = element_text(size = 16))  
+
+########################################################################################################################
+########################################################################################################################
+########################################################################################################################
+
+# CORRELO
+
+# dataCOMPLETA <- PAPER_LAs_DBrefino_6_ #
+# correlo4gruposALLmarkers <- matriz_concatenada2 # 21
+# correloBcomControle <- matriz_concatenada2 # 8
+# correloTcomControle <- matriz_concatenada2 # 9
+# correloMcomControle <- matriz_concatenada2 # 12
+
+filled_data1 <- matriz_concatenada2 %>% tidyr::gather("markers", "value", -Diagnostic)
+
+filled_data1$Diagnostic <- factor(filled_data1$Diagnostic, levels = c("Control","AML", "B-ALL", "T-ALL"))
+
+my_comparisons <- list( c("Control", "AML"), 
+                        c("Control", "B-ALL"), 
+                        c("Control", "T-ALL"),
+                        c("AML", "B-ALL"), 
+                        c("AML", "T-ALL"), 
+                        c("B-ALL", "T-ALL"))
+symnum.args <- list(
+  cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), 
+  symbols = c("****","***", "**", "*", waiver()))
+
+#c("#616F39", "#6A011F", "#93AECC", "#08376A")
+
+ggboxplot(filled_data1, x = "Diagnostic", y = "value",
+          color = "Diagnostic", palette = c("#616F39", "#6A011F", "#93AECC", "#08376A"),
+          add = c("jitter", "median_iqr"), 
+          add.params = list(size = 0.5))+
+  scale_y_continuous(breaks = pretty(c(0,1), n = 5), #Values showed from 0 to 8 with 4 breaks will show 0, 2, 4, 6 and 8
+                     limits = c(0,1.7), name=expression(CorrelationCoefficient))+ # y scale + axis' name
+  expand_limits(y = c(0, 1.6), size=1)+
+  facet_wrap(~markers  , strip.position="bottom", ncol = 4)+ #if you have more than 2 lines, use ( facet_rep_wrap(~gene, strip.position="bottom") ) instead of facet_Wrap
+  
+  stat_compare_means(method= "wilcox", label = "p.format", 
+                     label.y = c(1,1.2,1.3,1.4,1.5), bracket.size = 0.3, tip.length = 0.003, #location and brackets customization
+                     hide.ns = F, aes(Diagnostic = Diagnostic), comparisons = my_comparisons, 
+                     vjust = 0.5, size = 5, # * customization: vjust == 0 -> in the middle of the bracket; accepts negative values
+                     symnum.args = symnum.args)+ #customized this so that ns brackets won't show (hide.ns only hides the symbol)
+  
+  theme(strip.text.x = element_text(size = 15))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.line.x=element_line(),
+        strip.background = element_rect(color="white", fill="white"),
+        strip.placement = "outside",
+        panel.border = element_blank(), 
+        panel.background = element_blank(), 
+        panel.grid = element_blank(), 
+        panel.spacing.x = unit(0,"line"),
+        panel.spacing.y = unit(0,"line"),
+        axis.text.y = element_text(size = 14), 
+        axis.title.y = element_text(size = 16)) 
